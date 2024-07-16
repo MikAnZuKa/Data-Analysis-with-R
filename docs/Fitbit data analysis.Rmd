@@ -1,0 +1,211 @@
+---
+title: "Analysis of FitBit data"
+author: "Mikołaj Sobora"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "C:/Users/ASUS/Documents/Google Data Analitics Career Certificate Course/capstone_project/fitbit_dataset")
+```
+
+## Case Study
+
+This is my first case study, showcasing acquired skills in R Programming. For this purpose I will use public data that explores habits of smart device users' daily habits. 
+
+DATASET:
+FitBit Fitness Tracker Data (CC0: Public Domain, dataset made available through Mobius): This Kaggle data set
+contains personal fitness tracker from thirty fitbit users. Thirty eligible Fitbit users consented to the submission of
+personal tracker data, including minute-level output for physical activity, heart rate, and sleep monitoring. It includes
+information about daily activity, steps, and heart rate that can be used to explore users’ habits.
+
+### Prepare
+
+* Setting up my environment.
+
+I dowloaded the dataset from Kaggle in .csv format and saved it on my harddrive. Then in Rstudio I installed necessary packages to proceed with my task.
+
+```{r packages, message=FALSE, results='hide', warning=FALSE}
+install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+install.packages("data.table", repos = "http://cran.us.r-project.org")
+install.packages("rmarkdown", repos = "http://cran.us.r-project.org")
+library(data.table)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(skimr)
+library(janitor)
+library(lubridate)
+library(ggplot2)
+library(scales)
+library(rmarkdown)
+```
+
+
+Then I set my working directory to the file in which I saved this dataset using setwd() function and proceeded to load the .csv files.
+
+```{r}
+hourly_calories <- read.csv("mturkfitbit_export_3.12.16-4.11.16/Fitabase Data 3.12.16-4.11.16/hourlyCalories_merged.csv")
+hourly_intensities <- read.csv("mturkfitbit_export_3.12.16-4.11.16/Fitabase Data 3.12.16-4.11.16/hourlyIntensities_merged.csv")
+hourly_steps <- read.csv("mturkfitbit_export_3.12.16-4.11.16/Fitabase Data 3.12.16-4.11.16/hourlySteps_merged.csv")
+weight_log_info <- read.csv("mturkfitbit_export_3.12.16-4.11.16/Fitabase Data 3.12.16-4.11.16/weightLogInfo_merged.csv")
+daily_activity <- read.csv("mturkfitbit_export_4.12.16-5.12.16/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv")
+sleep_day <- read.csv("mturkfitbit_export_4.12.16-5.12.16/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv")
+```
+
+
+
+* Getting acquainted with the data.  
+
+After uploading all files into RStudio I began to examine it. I created an object containing all files to make my work more time efficient.
+
+
+```{r}
+all_files <- c(hourly_calories, hourly_intensities, hourly_steps, weight_log_info, daily_activity, sleep_day)
+```
+
+First I used glimpse() to get some insights from the data.
+
+```{r}
+glimpse(all_files)
+```
+
+Then to get more details about each file I used head() function. 
+
+```{r}
+head(hourly_calories)
+head(hourly_intensities)
+head(hourly_steps)
+head(weight_log_info)
+head(daily_activity)
+head(sleep_day)
+```
+```{r}
+n_distinct(daily_activity$Id)
+n_distinct(sleep_day$Id)
+
+nrow(daily_activity)
+nrow(sleep_day)
+```
+
+After examining the results here is what I found:
+
+* all files have one column in common which is column "Id" therefore merging is tempting
+* files describing hourly activities have the same amount of rows
+* there are only 3 types of objects (characters, numeric or integers)
+* columns are written in PascalCase which is not to my liking so I will have to change it to SnakeCase
+* there were more participants in daily_activity dataset than in sleep dataset
+
+### Process
+
+* Merging files
+
+```{r}
+data_by_hours <- bind_cols(hourly_calories, hourly_intensities, hourly_steps)
+```
+
+* Examining the new dataset
+
+```{r}
+head(data_by_hours)
+colnames(data_by_hours)
+```
+
+* Deleting duplicate rows
+
+```{r}
+data_by_hours <- subset(data_by_hours, select = c(-4,-5,-8,-9))
+```
+
+* Renaming columns
+
+```{r renaming, results='hide'}
+data_by_hours <- data_by_hours %>% rename(id=Id...1, activity_hour=ActivityHour...2, calories=Calories, total_intensity=TotalIntensity, avg_intensity=AverageIntensity, steps=StepTotal)
+
+colnames(daily_activity)
+daily_activity <- daily_activity %>% rename(id=Id, activity_date = ActivityDate, total_steps = TotalSteps, total_distance = TotalDistance, tracker_distance = TrackerDistance, logged_activities_distance = LoggedActivitiesDistance, very_active_distance = VeryActiveDistance, moderately_active_distance = ModeratelyActiveDistance, light_active_distance = LightActiveDistance, sedentary_active_distance = SedentaryActiveDistance, very_active_minutes = VeryActiveMinutes, fairly_active_minutes = FairlyActiveMinutes, lightly_active_minutes = LightlyActiveMinutes, sedentary_minutes = SedentaryMinutes, calories = Calories)
+
+colnames(sleep_day)
+sleep_day <- sleep_day %>% rename(id = Id, sleep_day = SleepDay, total_sleep_records = TotalSleepRecords, total_minutes_asleep = TotalMinutesAsleep, total_time_in_bed = TotalTimeInBed)
+```
+
+```{r}
+head(data_by_hours)
+head(daily_activity)
+head(sleep_day)
+```
+
+* Changing DATE format
+
+```{r}
+data_by_hours$activity_hour <- format(as_datetime(data_by_hours$activity_hour, format = "%m/%d/%Y %I:%M:%S %p"), "%d/%m/%Y %I:%M:%S %p")
+
+data_by_hours$activity_hour <- parse_date_time(data_by_hours$activity_hour, "%d/%m/%Y %I:%M:%S %p")
+
+str(data_by_hours)
+```
+
+### Analysis
+
+* Summary statistics and visuals
+
+```{r}
+daily_activity %>%
+  select(total_steps,
+         total_distance,
+         sedentary_minutes,
+         calories) %>%
+  summary()
+```
+
+Here I made basic summary of daily_activity dataset. The pattern seems clear: The more you walk the more you spend time resting and burn calories. But is it accurate for all tested subjects? Next is a visualization created on two arguments: total_steps and calories:
+
+```{r, echo=FALSE}
+ggplot(data=daily_activity) + geom_point(aes(x=total_steps, y=calories)) + ggtitle("Plot of Steps by Calories") + xlab("Steps") + ylab("Calories")
+```
+
+This viz negates previous insights. Steps and calories are not directly proportional which suggest other factors that are relevant to burnt calories. The dataset needs further examination. I decided to play some more with this two values and created a visualization showing steps and calories burnt of each fitbit user from a whole month.
+
+```{r}
+calories <- hourly_calories %>% group_by(Id) %>% 
+  summarise(sum_calories=sum(Calories),
+            .groups = 'drop')
+
+steps <- hourly_steps %>% group_by(Id) %>% 
+  summarise(sum_steps=sum(StepTotal),
+            .groups = 'drop')
+
+calories_steps_corellation <- merge(calories, steps, by ="Id")
+```
+```{r, echo=FALSE}
+mindate <- min(data_by_hours$activity_hour)
+maxdate <- max(data_by_hours$activity_hour)
+ggplot(data=calories_steps_corellation) + geom_point(aes(x=sum_steps, y=sum_calories, color = as.factor(Id)), show.legend = FALSE) + scale_x_continuous(labels = label_comma()) + labs(title="Taken steps and burnt calories in a month time period", caption = paste0("Date from: ", mindate, " to ", maxdate),
+       x="Steps",
+       y="Calories")
+```
+
+Moving on to another summary:
+```{r}
+sleep_day %>%
+  select(total_sleep_records,
+         total_minutes_asleep,
+         total_time_in_bed) %>%
+  summary()
+```
+
+Just like before, this summary tells me that the more one sleeps the more he stays in bed. 
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+ggplot(data=sleep_day, aes(x=total_minutes_asleep, y=total_time_in_bed)) + geom_point() + geom_smooth(method=lm, se=FALSE, col='blue', size=2) + labs(title = "Time in bed vs sleep time", x="Minutes asleep", y="Minutes in bed")
+```
+
+This visualization proves previous insight true. The trend line is very close to the points of this scatterplot which implies a strong correlation between minutes asleep and time spent in bed.
+
+## Summary
+
+In this Case Study I showed what I have learned in R programming regarding Data Analysis. I dowloaded and loaded dataset from a public source into RStudio, used some functions from tidyverse library, cleaned and processed the data, did few aggregation functions, plotted clear and easy to understand charts and managed to deliver a couple of insights based on the story that data showed me. I am open to constructive criticism on how to improve my skills and what could have bedn done better for next time. I am always open to acquiring new knowledge :)
